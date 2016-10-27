@@ -1,310 +1,133 @@
 package redis.clients.jedis;
 
-import java.lang.management.ManagementFactory;
+import java.net.URI;
 
-import javax.management.InstanceAlreadyExistsException;
-import javax.management.MBeanRegistrationException;
-import javax.management.MBeanServer;
-import javax.management.MalformedObjectNameException;
-import javax.management.NotCompliantMBeanException;
-import javax.management.ObjectName;
+import org.apache.commons.pool2.impl.GenericObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 
-import org.apache.commons.pool.BasePoolableObjectFactory;
-import org.apache.commons.pool.impl.GenericObjectPool;
-import org.apache.commons.pool.impl.GenericObjectPool.Config;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import redis.clients.jedis.exceptions.JedisException;
+import redis.clients.util.JedisURIHelper;
 import redis.clients.util.Pool;
 
-public class JedisPool extends Pool<Jedis> implements JedisPoolMXBean {
+public class JedisPool extends Pool<Jedis> {
 
-    protected static Logger logger = LoggerFactory.getLogger(JedisPool.class);
-    private JedisFactory factory;
+  public JedisPool() {
+    this(Protocol.DEFAULT_HOST, Protocol.DEFAULT_PORT);
+  }
 
-    public JedisPool(final Config poolConfig, final String host) {
-        this(poolConfig, host, Protocol.DEFAULT_PORT, Protocol.DEFAULT_TIMEOUT, null, Protocol.DEFAULT_DATABASE);
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final String host) {
+    this(poolConfig, host, Protocol.DEFAULT_PORT, Protocol.DEFAULT_TIMEOUT, null,
+        Protocol.DEFAULT_DATABASE, null);
+  }
+
+  public JedisPool(String host, int port) {
+    this(new GenericObjectPoolConfig(), host, port, Protocol.DEFAULT_TIMEOUT, null,
+        Protocol.DEFAULT_DATABASE, null);
+  }
+
+  public JedisPool(final String host) {
+    URI uri = URI.create(host);
+    if (JedisURIHelper.isValid(uri)) {
+      String h = uri.getHost();
+      int port = uri.getPort();
+      String password = JedisURIHelper.getPassword(uri);
+      int database = JedisURIHelper.getDBIndex(uri);
+      this.internalPool = new GenericObjectPool<Jedis>(new JedisFactory(h, port,
+          Protocol.DEFAULT_TIMEOUT, Protocol.DEFAULT_TIMEOUT, password, database, null),
+          new GenericObjectPoolConfig());
+    } else {
+      this.internalPool = new GenericObjectPool<Jedis>(new JedisFactory(host,
+          Protocol.DEFAULT_PORT, Protocol.DEFAULT_TIMEOUT, Protocol.DEFAULT_TIMEOUT, null,
+          Protocol.DEFAULT_DATABASE, null), new GenericObjectPoolConfig());
     }
+  }
 
-    public JedisPool(String host, int port) {
-        this(new Config(), host, port, Protocol.DEFAULT_TIMEOUT, null, Protocol.DEFAULT_DATABASE);
+  public JedisPool(final URI uri) {
+    this(new GenericObjectPoolConfig(), uri, Protocol.DEFAULT_TIMEOUT);
+  }
+
+  public JedisPool(final URI uri, final int timeout) {
+    this(new GenericObjectPoolConfig(), uri, timeout);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final String host, int port,
+      int timeout, final String password) {
+    this(poolConfig, host, port, timeout, password, Protocol.DEFAULT_DATABASE, null);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final String host, final int port) {
+    this(poolConfig, host, port, Protocol.DEFAULT_TIMEOUT, null, Protocol.DEFAULT_DATABASE, null);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final String host, final int port,
+      final int timeout) {
+    this(poolConfig, host, port, timeout, null, Protocol.DEFAULT_DATABASE, null);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final String host, int port,
+      int timeout, final String password, final int database) {
+    this(poolConfig, host, port, timeout, password, database, null);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final String host, int port,
+      int timeout, final String password, final int database, final String clientName) {
+    this(poolConfig, host, port, timeout, timeout, password, database, clientName);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final String host, int port,
+      final int connectionTimeout, final int soTimeout, final String password, final int database,
+      final String clientName) {
+    super(poolConfig, new JedisFactory(host, port, connectionTimeout, soTimeout, password,
+        database, clientName));
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final URI uri) {
+    this(poolConfig, uri, Protocol.DEFAULT_TIMEOUT);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final URI uri, final int timeout) {
+    this(poolConfig, uri, timeout, timeout);
+  }
+
+  public JedisPool(final GenericObjectPoolConfig poolConfig, final URI uri,
+      final int connectionTimeout, final int soTimeout) {
+    super(poolConfig, new JedisFactory(uri, connectionTimeout, soTimeout, null));
+  }
+
+  @Override
+  public Jedis getResource() {
+    Jedis jedis = super.getResource();
+    jedis.setDataSource(this);
+    return jedis;
+  }
+
+  /**
+   * @deprecated starting from Jedis 3.0 this method will not be exposed. Resource cleanup should be
+   *             done using @see {@link redis.clients.jedis.Jedis#close()}
+   */
+  @Override
+  @Deprecated
+  public void returnBrokenResource(final Jedis resource) {
+    if (resource != null) {
+      returnBrokenResourceObject(resource);
     }
+  }
 
-    public JedisPool(final String host) {
-        this(host, Protocol.DEFAULT_PORT);
+  /**
+   * @deprecated starting from Jedis 3.0 this method will not be exposed. Resource cleanup should be
+   *             done using @see {@link redis.clients.jedis.Jedis#close()}
+   */
+  @Override
+  @Deprecated
+  public void returnResource(final Jedis resource) {
+    if (resource != null) {
+      try {
+        resource.resetState();
+        returnResourceObject(resource);
+      } catch (Exception e) {
+        returnBrokenResource(resource);
+        throw new JedisException("Could not return the resource to the pool", e);
+      }
     }
-    
-    /**
-     * Same as {@link #JedisPool(String, int)} except this
-     * constructor will also register itself to jmx with the poolName
-     * 
-     * @param host
-     * @param port
-     * @param poolName
-     */
-    public JedisPool(final String host, final int port, final String poolName) {
-        this(host, port);
-        register(poolName);
-    }
-
-    public JedisPool(final Config poolConfig, final String host, final int port,
-            int timeout, final String password) {
-        super();
-        factory = new JedisFactory(host, port,
-                ((timeout > 0) ? timeout : -1), password, Protocol.DEFAULT_DATABASE);
-        init(poolConfig, factory);
-    }
-
-    /**
-     * Same as {@link #JedisPool(Config, String, int, int, String)} except this
-     * constructor will also register itself to jmx with the poolName
-     * 
-     * @param poolConfig
-     * @param host
-     * @param port
-     * @param timeout
-     * @param password
-     * @param poolName
-     */
-    public JedisPool(final Config poolConfig, final String host, int port,
-            int timeout, final String password, final String poolName) {
-        this(poolConfig, host, port, timeout, password, Protocol.DEFAULT_DATABASE);
-    }
-
-    public JedisPool(final Config poolConfig, final String host, int port,
-            int timeout, final String password, final String poolName, final int database) {
-        this(poolConfig, host, port, timeout, password, database);
-        register(poolName);
-    }
-
-    public JedisPool(final Config poolConfig, final String host, final int port, final int timeout) {
-        this(poolConfig, host, port, timeout, null, Protocol.DEFAULT_DATABASE);
-    }
-
-    public JedisPool(final Config poolConfig, final String host, int port, int timeout,
-            final String password, final int database) {
-        super();
-        factory = new JedisFactory(host, port, timeout, password, database);
-        init(poolConfig, factory);
-    }
-
-    /**
-     * Register itself to jmx
-     * @param poolName
-     */
-    private void register(final String poolName) {
-        final String beanName = this.getClass().getPackage().getName() + ":name=" + poolName;
-        logger.info("Registering JMX " + beanName);
-        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-        ObjectName on = null;
-        try {
-            on = new ObjectName(beanName);
-        } catch (MalformedObjectNameException e) {
-            logger.warn("Unable to register " + beanName, e);
-            return;
-        } catch (NullPointerException e) {
-            logger.warn("Unable to register " + beanName, e);
-            return;
-        }
-
-        if (!mbs.isRegistered(on)) {
-            try {
-                mbs.registerMBean(this, on);
-            } catch (InstanceAlreadyExistsException e) {
-                logger.warn("Unable to register " + beanName, e);
-            } catch (MBeanRegistrationException e) {
-                logger.warn("Unable to register " + beanName, e);
-            } catch (NotCompliantMBeanException e) {
-                logger.warn("Unable to register " + beanName, e);
-            }
-        }
-    }
-    
-    @Override
-    public String getHost() {
-        return factory.getHost();
-    }
-
-    @Override
-    public int getPort() {
-        return factory.getPort();
-    }
-
-    @Override
-    public int getTimeout() {
-        return factory.getTimeout();
-    }
-
-    @Override
-    public WhenExhaustedAction getWhenExhaustedAction() {
-        switch (getWhenExhaustedActionByte()) {
-            case GenericObjectPool.WHEN_EXHAUSTED_FAIL:
-                return WhenExhaustedAction.FAIL;
-            case GenericObjectPool.WHEN_EXHAUSTED_GROW:
-                return WhenExhaustedAction.GROW;
-            case GenericObjectPool.WHEN_EXHAUSTED_BLOCK:
-            default:
-                return WhenExhaustedAction.BLOCK;
-        }
-    }
-
-    @Override
-    public void setWhenExhaustedAction(WhenExhaustedAction whenExhaustedAction) {
-        switch (whenExhaustedAction) {
-            case FAIL:
-                setWhenExhaustedActionByte(GenericObjectPool.WHEN_EXHAUSTED_FAIL);
-                break;
-            case BLOCK:
-                setWhenExhaustedActionByte(GenericObjectPool.WHEN_EXHAUSTED_BLOCK);
-                break;
-            case GROW:
-                setWhenExhaustedActionByte(GenericObjectPool.WHEN_EXHAUSTED_GROW);
-                break;
-            default:
-                setWhenExhaustedActionByte(GenericObjectPool.DEFAULT_WHEN_EXHAUSTED_ACTION);
-                break;
-        }
-    }
-
-    /**
-     * Get Status as String
-     */
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(" Host:").append(getHost());
-        sb.append(" Port:").append(getPort());
-        sb.append(" Timeout:").append(getTimeout());
-        sb.append(" NumActive:").append(getNumActive());
-        sb.append(" NumIdle:").append(getNumIdle());
-        sb.append(" Lifo?:").append(getLifo());
-        sb.append(" MaxActive:").append(getMaxActive());
-        sb.append(" MaxIdle:").append(getMaxIdle());
-        sb.append(" MaxWait:").append(getMaxWait());
-        sb.append(" MinEvictableIdleTimeMillis:").append(getMinEvictableIdleTimeMillis());
-        sb.append(" MinIdle:").append(getMinIdle());
-        sb.append(" NumTestsPerEvictionRun:").append(getNumTestsPerEvictionRun());
-        sb.append(" SoftMinEvictableIdleTimeMillis:").append(getSoftMinEvictableIdleTimeMillis());
-        sb.append(" TestOnBorrow?:").append(getTestOnBorrow());
-        sb.append(" TestOnReturn?:").append(getTestOnReturn());
-        sb.append(" TestOnReturn?:").append(getTestOnReturn());
-        sb.append(" TimeBetweenEvictionRunsMillis:").append(getTimeBetweenEvictionRunsMillis());
-        sb.append(" WhenExhaustedAction:").append(getWhenExhaustedAction());
-        return sb.toString();
-    }
-
-    /**
-     * Gracefully reset new host and port
-     * 
-     * @param host
-     * @param port
-     */
-    @Override
-    public void updateHostAndPort(final String host, final int port) {
-        // update facotry
-        factory.updateHostAndPort(host, port);
-
-        // Remove the idle Jedis
-        clear();
-
-        // the active ones will be either validated off or timed out if
-        // all of the TestOn* was set to false. 
-    }
-
-    /**
-     * PoolableObjectFactory custom impl.
-     */
-    private static class JedisFactory extends BasePoolableObjectFactory {
-        private String host;
-        private int port;
-        private final int timeout;
-        private final String password;
-        private final int database;
-
-        public JedisFactory(final String host, final int port,
-                final int timeout, final String password, final int database) {
-            super();
-            this.host = host;
-            this.port = port;
-            this.timeout = timeout;
-            this.password = password;
-            this.database = database;
-        }
-
-        public void updateHostAndPort(final String host, final int port) {
-            synchronized (this) {
-                this.host = host;
-                this.port = port;
-            }
-        }
-
-        public String getHost() {
-            return host;
-        }
-
-        public int getPort() {
-            return port;
-        }
-        
-        public int getTimeout() {
-            return timeout;
-        }
-
-        @Override
-        public Object makeObject() throws Exception {
-            final Jedis jedis;
-            if (timeout > 0) {
-                jedis = new Jedis(host, port, timeout);
-            } else {
-                jedis = new Jedis(host, port);
-            }
-
-            jedis.connect();
-            if (null != password) {
-                jedis.auth(password);
-            }
-            if( database != 0 ) {
-                jedis.select(database);
-            }
-            
-            return jedis;
-        }
-
-        @Override
-        public void destroyObject(final Object obj) throws Exception {
-            if (obj instanceof Jedis) {
-                final Jedis jedis = (Jedis) obj;
-                if (jedis.isConnected()) {
-                    try {
-                        try {
-                            jedis.quit();
-                        } catch (Exception e) {
-                        }
-                        jedis.disconnect();
-                    } catch (Exception e) {
-
-                    }
-                }
-            }
-        }
-
-        @Override
-        public boolean validateObject(final Object obj) {
-            if (obj instanceof Jedis) {
-                final Jedis jedis = (Jedis) obj;
-                String currentHost = host + ":" + port;
-                if (!jedis.connectedTo().equals(currentHost)) {
-                    return false;
-                }
-
-                try {
-                    return jedis.isConnected() && jedis.ping().equals("PONG");
-                } catch (final Exception e) {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-    }
+  }
 }

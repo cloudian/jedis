@@ -1,151 +1,165 @@
 package redis.clients.util;
 
-import org.apache.commons.pool.PoolableObjectFactory;
-import org.apache.commons.pool.impl.GenericObjectPool;
+import java.io.Closeable;
+
+import org.apache.commons.pool2.PooledObjectFactory;
+import org.apache.commons.pool2.impl.GenericObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisException;
 
-public abstract class Pool<T> {
-    private GenericObjectPool internalPool;
+public abstract class Pool<T> implements Closeable {
+  protected GenericObjectPool<T> internalPool;
 
-    public Pool(final GenericObjectPool.Config poolConfig,
-            PoolableObjectFactory factory) {
-        init(poolConfig, factory);
-    }
+  /**
+   * Using this constructor means you have to set and initialize the internalPool yourself.
+   */
+  public Pool() {
+  }
 
-    public Pool() {
-        internalPool = null;
-    }
+  @Override
+  public void close() {
+    destroy();
+  }
 
-    protected void init(final GenericObjectPool.Config poolConfig,
-            PoolableObjectFactory factory) {
-        internalPool = new GenericObjectPool(factory, poolConfig);
-    }
+  public boolean isClosed() {
+    return this.internalPool.isClosed();
+  }
 
-    @SuppressWarnings("unchecked")
-    public T getResource() {
-        try {
-            return (T) internalPool.borrowObject();
-        } catch (Exception e) {
-            throw new JedisConnectionException(
-                    "Could not get a resource from the pool", e);
-        }
-    }
+  public Pool(final GenericObjectPoolConfig poolConfig, PooledObjectFactory<T> factory) {
+    initPool(poolConfig, factory);
+  }
 
-    public void returnResource(final T resource) {
-        try {
-            internalPool.returnObject(resource);
-        } catch (Exception e) {
-            throw new JedisException(
-                    "Could not return the resource to the pool", e);
-        }
+  public void initPool(final GenericObjectPoolConfig poolConfig, PooledObjectFactory<T> factory) {
+
+    if (this.internalPool != null) {
+      try {
+        closeInternalPool();
+      } catch (Exception e) {
+      }
     }
 
-    public void returnBrokenResource(final T resource) {
-        try {
-            internalPool.invalidateObject(resource);
-        } catch (Exception e) {
-            throw new JedisException(
-                    "Could not return the resource to the pool", e);
-        }
+    this.internalPool = new GenericObjectPool<T>(factory, poolConfig);
+  }
+
+  public T getResource() {
+    try {
+      return internalPool.borrowObject();
+    } catch (Exception e) {
+      throw new JedisConnectionException("Could not get a resource from the pool", e);
+    }
+  }
+
+  /**
+   * @deprecated starting from Jedis 3.0 this method will not be exposed. Resource cleanup should be
+   *             done using @see {@link redis.clients.jedis.Jedis#close()}
+   */
+  @Deprecated
+  public void returnResourceObject(final T resource) {
+    if (resource == null) {
+      return;
+    }
+    try {
+      internalPool.returnObject(resource);
+    } catch (Exception e) {
+      throw new JedisException("Could not return the resource to the pool", e);
+    }
+  }
+
+  /**
+   * @deprecated starting from Jedis 3.0 this method will not be exposed. Resource cleanup should be
+   *             done using @see {@link redis.clients.jedis.Jedis#close()}
+   */
+  @Deprecated
+  public void returnBrokenResource(final T resource) {
+    if (resource != null) {
+      returnBrokenResourceObject(resource);
+    }
+  }
+
+  /**
+   * @deprecated starting from Jedis 3.0 this method will not be exposed. Resource cleanup should be
+   *             done using @see {@link redis.clients.jedis.Jedis#close()}
+   */
+  @Deprecated
+  public void returnResource(final T resource) {
+    if (resource != null) {
+      returnResourceObject(resource);
+    }
+  }
+
+  public void destroy() {
+    closeInternalPool();
+  }
+
+  protected void returnBrokenResourceObject(final T resource) {
+    try {
+      internalPool.invalidateObject(resource);
+    } catch (Exception e) {
+      throw new JedisException("Could not return the resource to the pool", e);
+    }
+  }
+
+  protected void closeInternalPool() {
+    try {
+      internalPool.close();
+    } catch (Exception e) {
+      throw new JedisException("Could not destroy the pool", e);
+    }
+  }
+
+  public int getNumActive() {
+    if (poolInactive()) {
+      return -1;
     }
 
-    public void destroy() {
-        try {
-            internalPool.close();
-        } catch (Exception e) {
-            throw new JedisException("Could not destroy the pool", e);
-        }
+    return this.internalPool.getNumActive();
+  }
+
+  public int getNumIdle() {
+    if (poolInactive()) {
+      return -1;
     }
 
-    public void clear() {
-        try {
-            internalPool.clear();
-        } catch (Exception e) {
-            throw new JedisException("Could not clear the pool", e);
-        }
+    return this.internalPool.getNumIdle();
+  }
+
+  public int getNumWaiters() {
+    if (poolInactive()) {
+      return -1;
     }
 
-    public int getNumActive() {
-        return internalPool.getNumActive();
+    return this.internalPool.getNumWaiters();
+  }
+
+  public long getMeanBorrowWaitTimeMillis() {
+    if (poolInactive()) {
+      return -1;
     }
-    public int getNumIdle() {
-        return internalPool.getNumIdle();
+
+    return this.internalPool.getMeanBorrowWaitTimeMillis();
+  }
+
+  public long getMaxBorrowWaitTimeMillis() {
+    if (poolInactive()) {
+      return -1;
     }
-    public boolean getLifo() {
-        return internalPool.getLifo();
+
+    return this.internalPool.getMaxBorrowWaitTimeMillis();
+  }
+
+  private boolean poolInactive() {
+    return this.internalPool == null || this.internalPool.isClosed();
+  }
+
+  public void addObjects(int count) {
+    try {
+      for (int i = 0; i < count; i++) {
+        this.internalPool.addObject();
+      }
+    } catch (Exception e) {
+      throw new JedisException("Error trying to add idle objects", e);
     }
-    public int getMaxActive() {
-        return internalPool.getMaxActive();
-    }
-    public int getMaxIdle() {
-        return internalPool.getMaxIdle();
-    }
-    public long getMaxWait() {
-        return internalPool.getMaxWait();
-    }
-    public long getMinEvictableIdleTimeMillis() {
-        return internalPool.getMinEvictableIdleTimeMillis();
-    }
-    public int getMinIdle() {
-        return internalPool.getMinIdle();
-    }
-    public int getNumTestsPerEvictionRun() {
-        return internalPool.getNumTestsPerEvictionRun();
-    }
-    public long getSoftMinEvictableIdleTimeMillis() {
-        return internalPool.getSoftMinEvictableIdleTimeMillis();
-    }
-    public boolean getTestOnBorrow() {
-        return internalPool.getTestOnBorrow();
-    }
-    public boolean getTestOnReturn() {
-        return internalPool.getTestOnReturn();
-    }
-    public boolean getTestWhileIdle() {
-        return internalPool.getTestWhileIdle();
-    }
-    public long getTimeBetweenEvictionRunsMillis() {
-        return internalPool.getTimeBetweenEvictionRunsMillis();
-    }
-    public byte getWhenExhaustedActionByte() {
-        return internalPool.getWhenExhaustedAction();
-    }
-    public void setMaxActive(int maxActive) {
-        internalPool.setMaxActive(maxActive);
-    }
-    public void setMaxIdle(int maxIdle) {
-        internalPool.setMaxIdle(maxIdle);
-    }
-    public void setMaxWait(long maxWait) {
-        internalPool.setMaxWait(maxWait);
-    }
-    public void setMinEvictableIdleTimeMillis(long minEvictableIdleTimeMillis) {
-        internalPool.setMinEvictableIdleTimeMillis(minEvictableIdleTimeMillis);
-    }
-    public void setMinIdle(int minIdle) {
-        internalPool.setMinIdle(minIdle);
-    }
-    public void setNumTestsPerEvictionRun(int numTestsPerEvictionRun) {
-        internalPool.setNumTestsPerEvictionRun(numTestsPerEvictionRun);
-    }
-    public void setSoftMinEvictableIdleTimeMillis(long softMinEvictableIdleTimeMillis) {
-        internalPool.setSoftMinEvictableIdleTimeMillis(softMinEvictableIdleTimeMillis);
-    }
-    public void setTestOnBorrow(boolean testOnBorrow) {
-        internalPool.setTestOnBorrow(testOnBorrow);
-    }
-    public void setTestOnReturn(boolean testOnReturn) {
-        internalPool.setTestOnReturn(testOnReturn);
-    }
-    public void setTestWhileIdle(boolean testWhileIdle) {
-        internalPool.setTestWhileIdle(testWhileIdle);
-    }
-    public void setTimeBetweenEvictionRunsMillis(long timeBetweenEvictionRunsMillis) {
-        internalPool.setTimeBetweenEvictionRunsMillis(timeBetweenEvictionRunsMillis);
-    }
-    public void setWhenExhaustedActionByte(byte whenExhaustedAction) {
-        internalPool.setWhenExhaustedAction(whenExhaustedAction);
-    }
+  }
 }
