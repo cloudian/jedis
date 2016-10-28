@@ -54,6 +54,10 @@ public class Jedis extends BinaryJedis implements JedisCommands, MultiKeyCommand
     super(uri, connectionTimeout, soTimeout);
   }
 
+  protected String connectedTo() {
+    return client.getHost() + ":" + client.getPort();
+  }
+
   /**
    * Set the string value as value of the key. The string can't be longer than 1073741824 bytes (1
    * GB).

@@ -77,6 +77,18 @@ class JedisFactory implements PooledObjectFactory<Jedis> {
 
   }
 
+    public String getHost() {
+        return this.hostAndPort.get().getHost();
+    }
+
+    public int getPort() {
+        return this.hostAndPort.get().getPort();
+    }
+
+    public int getTimeout() {
+        return connectionTimeout;
+    }
+
   @Override
   public PooledObject<Jedis> makeObject() throws Exception {
     final HostAndPort hostAndPort = this.hostAndPort.get();

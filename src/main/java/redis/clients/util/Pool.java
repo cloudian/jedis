@@ -162,4 +162,17 @@ public abstract class Pool<T> implements Closeable {
       throw new JedisException("Error trying to add idle objects", e);
     }
   }
+
+    
+    public PooledObjectFactory<T> getFactory() {
+        return internalPool.getFactory();
+    }
+
+ public void clear() {
+    try {
+        internalPool.clear();
+    } catch (Exception e) {
+        throw new JedisException("Could not clear the pool", e);
+    }
+ }
 }
