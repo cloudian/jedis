@@ -2,6 +2,7 @@ package redis.clients.jedis;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
@@ -16,8 +17,12 @@ import redis.clients.util.RedisInputStream;
 import redis.clients.util.RedisOutputStream;
 import redis.clients.util.SafeEncoder;
 
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 public class Connection implements Closeable {
 
+  private static final Logger logger = LogManager.getLogger(Connection.class);
   private static final byte[][] EMPTY_ARGS = new byte[0][];
 
   private String host = Protocol.DEFAULT_HOST;
@@ -100,6 +105,17 @@ public class Connection implements Closeable {
       connect();
       Protocol.sendCommand(outputStream, cmd, args);
       pipelinedCommands++;
+      if (logger.isTraceEnabled()) {
+          try {
+              StringBuffer sb = new StringBuffer();
+              sb.append(cmd);
+              for (int i = 0; i < args.length; ++i) {
+                  sb.append(' ').append(new String(args[i], "UTF-8"));
+              }
+              logger.trace(sb.toString());
+          } catch (UnsupportedEncodingException ex) {
+          }
+      }
       return this;
     } catch (JedisConnectionException ex) {
       /*

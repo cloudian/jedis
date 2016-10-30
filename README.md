@@ -1,5 +1,16 @@
 [![Build Status](https://travis-ci.org/xetorthio/jedis.png?branch=master)](https://travis-ci.org/xetorthio/jedis)
 
+# Cloudian
+
+Jedis code is forked to cloudian/jedis.
+
+To build package, use "mvn clean package -DskipTests".  Then copy jar
+file (e.g., jedis-2.8.1.jar) from the target directory to mts-s3/lib,
+and git commit it there. 
+
+Modifications to support JMX calls, add request logging.
+
+
 # Jedis
 
 Jedis is a blazingly small and sane [Redis](http://github.com/antirez/redis "Redis") java client.
