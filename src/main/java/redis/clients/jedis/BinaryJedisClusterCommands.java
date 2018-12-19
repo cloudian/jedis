@@ -14,6 +14,8 @@ public interface BinaryJedisClusterCommands {
 
   String set(byte[] key, byte[] value, byte[] nxxx, byte[] expx, long time);
 
+  String set(byte[] key, byte[] value, byte[] expx, long time);
+
   byte[] get(byte[] key);
 
   Boolean exists(byte[] key);
@@ -22,15 +24,23 @@ public interface BinaryJedisClusterCommands {
 
   String type(byte[] key);
 
+  byte[] dump(byte[] key);
+
+  String restore(byte[] key, int ttl, byte[] serializedValue);
+
   Long expire(byte[] key, int seconds);
 
-  Long pexpire(byte[] key, final long milliseconds);
+  Long pexpire(byte[] key, long milliseconds);
 
   Long expireAt(byte[] key, long unixTime);
 
   Long pexpireAt(byte[] key, long millisecondsTimestamp);
 
   Long ttl(byte[] key);
+
+  Long pttl(byte[] key);
+
+  Long touch(byte[] key);
 
   Boolean setbit(byte[] key, long offset, boolean value);
 
@@ -48,13 +58,15 @@ public interface BinaryJedisClusterCommands {
 
   String setex(byte[] key, int seconds, byte[] value);
 
-  Long decrBy(byte[] key, long integer);
+  String psetex(byte[] key, long milliseconds, byte[] value);
+
+  Long decrBy(byte[] key, long decrement);
 
   Long decr(byte[] key);
 
-  Long incrBy(byte[] key, long integer);
+  Long incrBy(byte[] key, long increment);
 
-  Double incrByFloat(byte[] key, double value);
+  Double incrByFloat(byte[] key, double increment);
 
   Long incr(byte[] key);
 
@@ -63,6 +75,8 @@ public interface BinaryJedisClusterCommands {
   byte[] substr(byte[] key, int start, int end);
 
   Long hset(byte[] key, byte[] field, byte[] value);
+
+  Long hset(byte[] key, Map<byte[], byte[]> hash);
 
   byte[] hget(byte[] key, byte[] field);
 
@@ -94,9 +108,9 @@ public interface BinaryJedisClusterCommands {
 
   Long llen(byte[] key);
 
-  List<byte[]> lrange(byte[] key, long start, long end);
+  List<byte[]> lrange(byte[] key, long start, long stop);
 
-  String ltrim(byte[] key, long start, long end);
+  String ltrim(byte[] key, long start, long stop);
 
   byte[] lindex(byte[] key, long index);
 
@@ -124,7 +138,7 @@ public interface BinaryJedisClusterCommands {
 
   byte[] srandmember(byte[] key);
 
-  List<byte[]> srandmember(final byte[] key, final int count);
+  List<byte[]> srandmember(byte[] key, int count);
 
   Long strlen(byte[] key);
 
@@ -136,23 +150,23 @@ public interface BinaryJedisClusterCommands {
 
   Long zadd(byte[] key, Map<byte[], Double> scoreMembers, ZAddParams params);
 
-  Set<byte[]> zrange(byte[] key, long start, long end);
+  Set<byte[]> zrange(byte[] key, long start, long stop);
 
-  Long zrem(byte[] key, byte[]... member);
+  Long zrem(byte[] key, byte[]... members);
 
-  Double zincrby(byte[] key, double score, byte[] member);
+  Double zincrby(byte[] key, double increment, byte[] member);
 
-  Double zincrby(byte[] key, double score, byte[] member, ZIncrByParams params);
+  Double zincrby(byte[] key, double increment, byte[] member, ZIncrByParams params);
 
   Long zrank(byte[] key, byte[] member);
 
   Long zrevrank(byte[] key, byte[] member);
 
-  Set<byte[]> zrevrange(byte[] key, long start, long end);
+  Set<byte[]> zrevrange(byte[] key, long start, long stop);
 
-  Set<Tuple> zrangeWithScores(byte[] key, long start, long end);
+  Set<Tuple> zrangeWithScores(byte[] key, long start, long stop);
 
-  Set<Tuple> zrevrangeWithScores(byte[] key, long start, long end);
+  Set<Tuple> zrevrangeWithScores(byte[] key, long start, long stop);
 
   Long zcard(byte[] key);
 
@@ -198,27 +212,29 @@ public interface BinaryJedisClusterCommands {
 
   Set<Tuple> zrevrangeByScoreWithScores(byte[] key, byte[] max, byte[] min, int offset, int count);
 
-  Long zremrangeByRank(byte[] key, long start, long end);
+  Long zremrangeByRank(byte[] key, long start, long stop);
 
-  Long zremrangeByScore(byte[] key, double start, double end);
+  Long zremrangeByScore(byte[] key, double min, double max);
 
-  Long zremrangeByScore(byte[] key, byte[] start, byte[] end);
+  Long zremrangeByScore(byte[] key, byte[] min, byte[] max);
 
-  Long zlexcount(final byte[] key, final byte[] min, final byte[] max);
+  Long zlexcount(byte[] key, byte[] min, byte[] max);
 
-  Set<byte[]> zrangeByLex(final byte[] key, final byte[] min, final byte[] max);
+  Set<byte[]> zrangeByLex(byte[] key, byte[] min, byte[] max);
 
-  Set<byte[]> zrangeByLex(final byte[] key, final byte[] min, final byte[] max, int offset,
+  Set<byte[]> zrangeByLex(byte[] key, byte[] min, byte[] max, int offset,
       int count);
 
-  Set<byte[]> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min);
+  Set<byte[]> zrevrangeByLex(byte[] key, byte[] max, byte[] min);
 
-  Set<byte[]> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min, int offset,
+  Set<byte[]> zrevrangeByLex(byte[] key, byte[] max, byte[] min, int offset,
       int count);
 
-  Long zremrangeByLex(final byte[] key, final byte[] min, final byte[] max);
+  Long zremrangeByLex(byte[] key, byte[] min, byte[] max);
 
+  @Deprecated
   Long linsert(byte[] key, Client.LIST_POSITION where, byte[] pivot, byte[] value);
+  Long linsert(byte[] key, ListPosition where, byte[] pivot, byte[] value);
 
   Long lpushx(byte[] key, byte[]... arg);
 
@@ -226,15 +242,17 @@ public interface BinaryJedisClusterCommands {
 
   Long del(byte[] key);
 
+  Long unlink(byte[] key);
+
   byte[] echo(byte[] arg);
 
-  Long bitcount(final byte[] key);
+  Long bitcount(byte[] key);
 
-  Long bitcount(final byte[] key, long start, long end);
+  Long bitcount(byte[] key, long start, long end);
 
-  Long pfadd(final byte[] key, final byte[]... elements);
+  Long pfadd(byte[] key, byte[]... elements);
 
-  long pfcount(final byte[] key);
+  long pfcount(byte[] key);
 
   // Geo Commands
 
@@ -253,11 +271,55 @@ public interface BinaryJedisClusterCommands {
   List<GeoRadiusResponse> georadius(byte[] key, double longitude, double latitude, double radius,
       GeoUnit unit);
 
+  List<GeoRadiusResponse> georadiusReadonly(byte[] key, double longitude, double latitude, double radius,
+      GeoUnit unit);
+
   List<GeoRadiusResponse> georadius(byte[] key, double longitude, double latitude, double radius,
+      GeoUnit unit, GeoRadiusParam param);
+
+  List<GeoRadiusResponse> georadiusReadonly(byte[] key, double longitude, double latitude, double radius,
       GeoUnit unit, GeoRadiusParam param);
 
   List<GeoRadiusResponse> georadiusByMember(byte[] key, byte[] member, double radius, GeoUnit unit);
 
+  List<GeoRadiusResponse> georadiusByMemberReadonly(byte[] key, byte[] member, double radius, GeoUnit unit);
+
   List<GeoRadiusResponse> georadiusByMember(byte[] key, byte[] member, double radius, GeoUnit unit,
       GeoRadiusParam param);
+
+  List<GeoRadiusResponse> georadiusByMemberReadonly(byte[] key, byte[] member, double radius, GeoUnit unit,
+      GeoRadiusParam param);
+
+  /**
+   * @deprecated Use {@link MultiKeyBinaryJedisClusterCommands#scan(byte[], redis.clients.jedis.ScanParams)}
+   */
+  ScanResult<byte[]> scan(byte[] cursor, ScanParams params);
+  
+  ScanResult<Map.Entry<byte[], byte[]>> hscan(byte[] key, byte[] cursor);
+
+  ScanResult<Map.Entry<byte[], byte[]>> hscan(byte[] key, byte[] cursor, ScanParams params);
+
+  ScanResult<byte[]> sscan(byte[] key, byte[] cursor);
+
+  ScanResult<byte[]> sscan(byte[] key, byte[] cursor, ScanParams params);
+
+  ScanResult<Tuple> zscan(byte[] key, byte[] cursor);
+
+  ScanResult<Tuple> zscan(byte[] key, byte[] cursor, ScanParams params);
+
+  /**
+   * Executes BITFIELD Redis command
+   * @param key
+   * @param arguments
+   */
+  List<Long> bitfield(byte[] key, byte[]... arguments);
+  
+  /**
+   * Used for HSTRLEN Redis command
+   * @param key 
+   * @param field
+   */
+  Long hstrlen(byte[] key, byte[] field);
+
+  Long waitReplicas(byte[] key, final int replicas, final long timeout);
 }

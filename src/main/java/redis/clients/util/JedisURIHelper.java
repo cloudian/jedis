@@ -2,9 +2,16 @@ package redis.clients.util;
 
 import java.net.URI;
 
-public class JedisURIHelper {
+public final class JedisURIHelper {
 
   private static final int DEFAULT_DB = 0;
+
+  private static final String REDIS = "redis";
+  private static final String REDISS = "rediss";
+
+  private JedisURIHelper(){
+    throw new InstantiationError( "Must not instantiate this class" );
+  }
 
   public static String getPassword(URI uri) {
     String userInfo = uri.getUserInfo();
@@ -37,6 +44,14 @@ public class JedisURIHelper {
 
   private static boolean isEmpty(String value) {
     return value == null || value.trim().length() == 0;
+  }
+
+  public static boolean isRedisScheme(URI uri) {
+    return REDIS.equals(uri.getScheme());
+  }
+
+  public static boolean isRedisSSLScheme(URI uri) {
+    return REDISS.equals(uri.getScheme());
   }
 
 }

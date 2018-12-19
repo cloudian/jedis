@@ -3,21 +3,27 @@ package redis.clients.jedis;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import redis.clients.jedis.exceptions.JedisAskDataException;
+import redis.clients.jedis.exceptions.JedisBusyException;
 import redis.clients.jedis.exceptions.JedisClusterException;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.exceptions.JedisMovedDataException;
+import redis.clients.jedis.exceptions.JedisNoScriptException;
 import redis.clients.util.RedisInputStream;
 import redis.clients.util.RedisOutputStream;
 import redis.clients.util.SafeEncoder;
 
 public final class Protocol {
 
-  private static final String ASK_RESPONSE = "ASK";
-  private static final String MOVED_RESPONSE = "MOVED";
-  private static final String CLUSTERDOWN_RESPONSE = "CLUSTERDOWN";
+  private static final String ASK_PREFIX = "ASK ";
+  private static final String MOVED_PREFIX = "MOVED ";
+  private static final String CLUSTERDOWN_PREFIX = "CLUSTERDOWN ";
+  private static final String BUSY_PREFIX = "BUSY ";
+  private static final String NOSCRIPT_PREFIX = "NOSCRIPT ";
+
   public static final String DEFAULT_HOST = "localhost";
   public static final int DEFAULT_PORT = 6379;
   public static final int DEFAULT_SENTINEL_PORT = 26379;
@@ -69,6 +75,9 @@ public final class Protocol {
   public static final byte[] BYTES_TRUE = toByteArray(1);
   public static final byte[] BYTES_FALSE = toByteArray(0);
 
+  public static final byte[] POSITIVE_INFINITY_BYTES = "+inf".getBytes();
+  public static final byte[] NEGATIVE_INFINITY_BYTES = "-inf".getBytes();
+
   private Protocol() {
     // this prevent the class from instantiation
   }
@@ -103,16 +112,20 @@ public final class Protocol {
     String message = is.readLine();
     // TODO: I'm not sure if this is the best way to do this.
     // Maybe Read only first 5 bytes instead?
-    if (message.startsWith(MOVED_RESPONSE)) {
+    if (message.startsWith(MOVED_PREFIX)) {
       String[] movedInfo = parseTargetHostAndSlot(message);
       throw new JedisMovedDataException(message, new HostAndPort(movedInfo[1],
-          Integer.valueOf(movedInfo[2])), Integer.valueOf(movedInfo[0]));
-    } else if (message.startsWith(ASK_RESPONSE)) {
+          Integer.parseInt(movedInfo[2])), Integer.parseInt(movedInfo[0]));
+    } else if (message.startsWith(ASK_PREFIX)) {
       String[] askInfo = parseTargetHostAndSlot(message);
       throw new JedisAskDataException(message, new HostAndPort(askInfo[1],
-          Integer.valueOf(askInfo[2])), Integer.valueOf(askInfo[0]));
-    } else if (message.startsWith(CLUSTERDOWN_RESPONSE)) {
+          Integer.parseInt(askInfo[2])), Integer.parseInt(askInfo[0]));
+    } else if (message.startsWith(CLUSTERDOWN_PREFIX)) {
       throw new JedisClusterException(message);
+    } else if (message.startsWith(BUSY_PREFIX)) {
+      throw new JedisBusyException(message);
+    } else if (message.startsWith(NOSCRIPT_PREFIX) ) {
+      throw new JedisNoScriptException(message);
     }
     throw new JedisDataException(message);
   }
@@ -129,7 +142,7 @@ public final class Protocol {
   private static String[] parseTargetHostAndSlot(String clusterRedirectResponse) {
     String[] response = new String[3];
     String[] messageInfo = clusterRedirectResponse.split(" ");
-    String[] targetHostAndPort = messageInfo[2].split(":");
+    String[] targetHostAndPort = HostAndPort.extractParts(messageInfo[2]);
     response[0] = messageInfo[1];
     response[1] = targetHostAndPort[0];
     response[2] = targetHostAndPort[1];
@@ -137,20 +150,20 @@ public final class Protocol {
   }
 
   private static Object process(final RedisInputStream is) {
-
     final byte b = is.readByte();
-    if (b == PLUS_BYTE) {
+    switch(b) {
+    case PLUS_BYTE:
       return processStatusCodeReply(is);
-    } else if (b == DOLLAR_BYTE) {
+    case DOLLAR_BYTE:
       return processBulkReply(is);
-    } else if (b == ASTERISK_BYTE) {
+    case ASTERISK_BYTE:
       return processMultiBulkReply(is);
-    } else if (b == COLON_BYTE) {
+    case COLON_BYTE:
       return processInteger(is);
-    } else if (b == MINUS_BYTE) {
+    case MINUS_BYTE:
       processError(is);
       return null;
-    } else {
+    default:
       throw new JedisConnectionException("Unknown reply: " + (char) b);
     }
   }
@@ -218,11 +231,32 @@ public final class Protocol {
   }
 
   public static final byte[] toByteArray(final double value) {
-    return SafeEncoder.encode(String.valueOf(value));
+    if (value == Double.POSITIVE_INFINITY) {
+      return POSITIVE_INFINITY_BYTES;
+    } else if (value == Double.NEGATIVE_INFINITY) {
+      return NEGATIVE_INFINITY_BYTES;
+    } else {
+      return SafeEncoder.encode(String.valueOf(value));
+    }
   }
 
   public static enum Command {
-    PING, SET, GET, QUIT, EXISTS, DEL, TYPE, FLUSHDB, KEYS, RANDOMKEY, RENAME, RENAMENX, RENAMEX, DBSIZE, EXPIRE, EXPIREAT, TTL, SELECT, MOVE, FLUSHALL, GETSET, MGET, SETNX, SETEX, MSET, MSETNX, DECRBY, DECR, INCRBY, INCR, APPEND, SUBSTR, HSET, HGET, HSETNX, HMSET, HMGET, HINCRBY, HEXISTS, HDEL, HLEN, HKEYS, HVALS, HGETALL, RPUSH, LPUSH, LLEN, LRANGE, LTRIM, LINDEX, LSET, LREM, LPOP, RPOP, RPOPLPUSH, SADD, SMEMBERS, SREM, SPOP, SMOVE, SCARD, SISMEMBER, SINTER, SINTERSTORE, SUNION, SUNIONSTORE, SDIFF, SDIFFSTORE, SRANDMEMBER, ZADD, ZRANGE, ZREM, ZINCRBY, ZRANK, ZREVRANK, ZREVRANGE, ZCARD, ZSCORE, MULTI, DISCARD, EXEC, WATCH, UNWATCH, SORT, BLPOP, BRPOP, AUTH, SUBSCRIBE, PUBLISH, UNSUBSCRIBE, PSUBSCRIBE, PUNSUBSCRIBE, PUBSUB, ZCOUNT, ZRANGEBYSCORE, ZREVRANGEBYSCORE, ZREMRANGEBYRANK, ZREMRANGEBYSCORE, ZUNIONSTORE, ZINTERSTORE, ZLEXCOUNT, ZRANGEBYLEX, ZREVRANGEBYLEX, ZREMRANGEBYLEX, SAVE, BGSAVE, BGREWRITEAOF, LASTSAVE, SHUTDOWN, INFO, MONITOR, SLAVEOF, CONFIG, STRLEN, SYNC, LPUSHX, PERSIST, RPUSHX, ECHO, LINSERT, DEBUG, BRPOPLPUSH, SETBIT, GETBIT, BITPOS, SETRANGE, GETRANGE, EVAL, EVALSHA, SCRIPT, SLOWLOG, OBJECT, BITCOUNT, BITOP, SENTINEL, DUMP, RESTORE, PEXPIRE, PEXPIREAT, PTTL, INCRBYFLOAT, PSETEX, CLIENT, TIME, MIGRATE, HINCRBYFLOAT, SCAN, HSCAN, SSCAN, ZSCAN, WAIT, CLUSTER, ASKING, PFADD, PFCOUNT, PFMERGE, READONLY, GEOADD, GEODIST, GEOHASH, GEOPOS, GEORADIUS, GEORADIUSBYMEMBER;
+    PING, SET, GET, QUIT, EXISTS, DEL, UNLINK, TYPE, FLUSHDB, KEYS, RANDOMKEY, RENAME, RENAMENX,
+    RENAMEX, DBSIZE, EXPIRE, EXPIREAT, TTL, SELECT, MOVE, FLUSHALL, GETSET, MGET, SETNX, SETEX,
+    MSET, MSETNX, DECRBY, DECR, INCRBY, INCR, APPEND, SUBSTR, HSET, HGET, HSETNX, HMSET, HMGET,
+    HINCRBY, HEXISTS, HDEL, HLEN, HKEYS, HVALS, HGETALL, RPUSH, LPUSH, LLEN, LRANGE, LTRIM, LINDEX,
+    LSET, LREM, LPOP, RPOP, RPOPLPUSH, SADD, SMEMBERS, SREM, SPOP, SMOVE, SCARD, SISMEMBER, SINTER,
+    SINTERSTORE, SUNION, SUNIONSTORE, SDIFF, SDIFFSTORE, SRANDMEMBER, ZADD, ZRANGE, ZREM, ZINCRBY,
+    ZRANK, ZREVRANK, ZREVRANGE, ZCARD, ZSCORE, MULTI, DISCARD, EXEC, WATCH, UNWATCH, SORT, BLPOP,
+    BRPOP, AUTH, SUBSCRIBE, PUBLISH, UNSUBSCRIBE, PSUBSCRIBE, PUNSUBSCRIBE, PUBSUB, ZCOUNT,
+    ZRANGEBYSCORE, ZREVRANGEBYSCORE, ZREMRANGEBYRANK, ZREMRANGEBYSCORE, ZUNIONSTORE, ZINTERSTORE,
+    ZLEXCOUNT, ZRANGEBYLEX, ZREVRANGEBYLEX, ZREMRANGEBYLEX, SAVE, BGSAVE, BGREWRITEAOF, LASTSAVE,
+    SHUTDOWN, INFO, MONITOR, SLAVEOF, CONFIG, STRLEN, SYNC, LPUSHX, PERSIST, RPUSHX, ECHO, LINSERT,
+    DEBUG, BRPOPLPUSH, SETBIT, GETBIT, BITPOS, SETRANGE, GETRANGE, EVAL, EVALSHA, SCRIPT, SLOWLOG,
+    OBJECT, BITCOUNT, BITOP, SENTINEL, DUMP, RESTORE, PEXPIRE, PEXPIREAT, PTTL, INCRBYFLOAT,
+    PSETEX, CLIENT, TIME, MIGRATE, HINCRBYFLOAT, SCAN, HSCAN, SSCAN, ZSCAN, WAIT, CLUSTER, ASKING,
+    PFADD, PFCOUNT, PFMERGE, READONLY, GEOADD, GEODIST, GEOHASH, GEOPOS, GEORADIUS, GEORADIUS_RO,
+    GEORADIUSBYMEMBER, GEORADIUSBYMEMBER_RO, MODULE, BITFIELD, HSTRLEN, TOUCH, SWAPDB;
 
     public final byte[] raw;
 
@@ -233,11 +267,15 @@ public final class Protocol {
   }
 
   public static enum Keyword {
-    AGGREGATE, ALPHA, ASC, BY, DESC, GET, LIMIT, MESSAGE, NO, NOSORT, PMESSAGE, PSUBSCRIBE, PUNSUBSCRIBE, OK, ONE, QUEUED, SET, STORE, SUBSCRIBE, UNSUBSCRIBE, WEIGHTS, WITHSCORES, RESETSTAT, RESET, FLUSH, EXISTS, LOAD, KILL, LEN, REFCOUNT, ENCODING, IDLETIME, AND, OR, XOR, NOT, GETNAME, SETNAME, LIST, MATCH, COUNT;
+    AGGREGATE, ALPHA, ASC, BY, DESC, GET, LIMIT, MESSAGE, NO, NOSORT, PMESSAGE, PSUBSCRIBE,
+    PUNSUBSCRIBE, OK, ONE, QUEUED, SET, STORE, SUBSCRIBE, UNSUBSCRIBE, WEIGHTS, WITHSCORES,
+    RESETSTAT, REWRITE, RESET, FLUSH, EXISTS, LOAD, KILL, LEN, REFCOUNT, ENCODING, IDLETIME,
+    AND, OR, XOR, NOT, GETNAME, SETNAME, LIST, MATCH, COUNT, PING, PONG, REPLACE, PAUSE;
+
     public final byte[] raw;
 
     Keyword() {
-      raw = SafeEncoder.encode(this.name().toLowerCase());
+      raw = SafeEncoder.encode(this.name().toLowerCase(Locale.ENGLISH));
     }
   }
 }

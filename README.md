@@ -6,7 +6,7 @@ Jedis code is forked to cloudian/jedis.
 
 To build package, use "mvn clean package -DskipTests".  Then copy jar
 file (e.g., jedis-2.8.1.jar) from the target directory to mts-s3/lib,
-and git commit it there. 
+and git commit it there.
 
 Modifications to support JMX calls, add request logging.
 

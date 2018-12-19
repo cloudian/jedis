@@ -9,6 +9,13 @@ import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import redis.clients.jedis.Protocol.Command;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisDataException;
@@ -17,12 +24,10 @@ import redis.clients.util.RedisInputStream;
 import redis.clients.util.RedisOutputStream;
 import redis.clients.util.SafeEncoder;
 
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
-
 public class Connection implements Closeable {
 
   private static final Logger logger = LogManager.getLogger(Connection.class);
+
   private static final byte[][] EMPTY_ARGS = new byte[0][];
 
   private String host = Protocol.DEFAULT_HOST;
@@ -34,6 +39,10 @@ public class Connection implements Closeable {
   private int connectionTimeout = Protocol.DEFAULT_TIMEOUT;
   private int soTimeout = Protocol.DEFAULT_TIMEOUT;
   private boolean broken = false;
+  private boolean ssl;
+  private SSLSocketFactory sslSocketFactory;
+  private SSLParameters sslParameters;
+  private HostnameVerifier hostnameVerifier;
 
   public Connection() {
   }
@@ -45,6 +54,23 @@ public class Connection implements Closeable {
   public Connection(final String host, final int port) {
     this.host = host;
     this.port = port;
+  }
+
+  public Connection(final String host, final int port, final boolean ssl) {
+    this.host = host;
+    this.port = port;
+    this.ssl = ssl;
+  }
+
+  public Connection(final String host, final int port, final boolean ssl,
+      SSLSocketFactory sslSocketFactory, SSLParameters sslParameters,
+      HostnameVerifier hostnameVerifier) {
+    this.host = host;
+    this.port = port;
+    this.ssl = ssl;
+    this.sslSocketFactory = sslSocketFactory;
+    this.sslParameters = sslParameters;
+    this.hostnameVerifier = hostnameVerifier;
   }
 
   public Socket getSocket() {
@@ -106,15 +132,15 @@ public class Connection implements Closeable {
       Protocol.sendCommand(outputStream, cmd, args);
       pipelinedCommands++;
       if (logger.isTraceEnabled()) {
-          try {
-              StringBuffer sb = new StringBuffer();
-              sb.append(cmd);
-              for (int i = 0; i < args.length; ++i) {
-                  sb.append(' ').append(new String(args[i], "UTF-8"));
-              }
-              logger.trace(sb.toString());
-          } catch (UnsupportedEncodingException ex) {
+        try {
+          StringBuffer sb = new StringBuffer();
+          sb.append(cmd);
+          for (int i = 0; i < args.length; ++i) {
+            sb.append(' ').append(new String(args[i], "UTF-8"));
           }
+          logger.trace(sb.toString());
+        } catch (UnsupportedEncodingException ex) {
+        }
       }
       return this;
     } catch (JedisConnectionException ex) {
@@ -173,11 +199,29 @@ public class Connection implements Closeable {
 
         socket.connect(new InetSocketAddress(host, port), connectionTimeout);
         socket.setSoTimeout(soTimeout);
+
+        if (ssl) {
+          if (null == sslSocketFactory) {
+            sslSocketFactory = (SSLSocketFactory)SSLSocketFactory.getDefault();
+          }
+          socket = sslSocketFactory.createSocket(socket, host, port, true);
+          if (null != sslParameters) {
+            ((SSLSocket) socket).setSSLParameters(sslParameters);
+          }
+          if ((null != hostnameVerifier) &&
+              (!hostnameVerifier.verify(host, ((SSLSocket) socket).getSession()))) {
+            String message = String.format(
+                "The connection to '%s' failed ssl/tls hostname verification.", host);
+            throw new JedisConnectionException(message);
+          }
+        }
+
         outputStream = new RedisOutputStream(socket.getOutputStream());
         inputStream = new RedisInputStream(socket.getInputStream());
       } catch (IOException ex) {
         broken = true;
-        throw new JedisConnectionException(ex);
+        throw new JedisConnectionException("Failed connecting to host " 
+            + host + ":" + port, ex);
       }
     }
   }
@@ -255,12 +299,12 @@ public class Connection implements Closeable {
 
   @SuppressWarnings("unchecked")
   public List<Object> getRawObjectMultiBulkReply() {
+    flush();
+    pipelinedCommands--;
     return (List<Object>) readProtocolWithCheckingBroken();
   }
 
   public List<Object> getObjectMultiBulkReply() {
-    flush();
-    pipelinedCommands--;
     return getRawObjectMultiBulkReply();
   }
 

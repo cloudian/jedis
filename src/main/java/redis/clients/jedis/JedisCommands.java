@@ -16,6 +16,8 @@ public interface JedisCommands {
 
   String set(String key, String value, String nxxx, String expx, long time);
 
+  String set(String key, String value, String expx, long time);
+
   String set(String key, String value, String nxxx);
 
   String get(String key);
@@ -25,6 +27,12 @@ public interface JedisCommands {
   Long persist(String key);
 
   String type(String key);
+
+  byte[] dump(String key);
+
+  String restore(String key, int ttl, byte[] serializedValue);
+
+  //String restoreReplace(String key, int ttl, byte[] serializedValue);
 
   Long expire(String key, int seconds);
 
@@ -36,7 +44,9 @@ public interface JedisCommands {
 
   Long ttl(String key);
 
-  Long pttl(final String key);
+  Long pttl(String key);
+
+  Long touch(String key);
 
   Boolean setbit(String key, long offset, boolean value);
 
@@ -54,15 +64,15 @@ public interface JedisCommands {
 
   String setex(String key, int seconds, String value);
 
-  String psetex(final String key, final long milliseconds, final String value);
+  String psetex(String key, long milliseconds, String value);
 
-  Long decrBy(String key, long integer);
+  Long decrBy(String key, long decrement);
 
   Long decr(String key);
 
-  Long incrBy(String key, long integer);
+  Long incrBy(String key, long increment);
 
-  Double incrByFloat(String key, double value);
+  Double incrByFloat(String key, double increment);
 
   Long incr(String key);
 
@@ -71,6 +81,8 @@ public interface JedisCommands {
   String substr(String key, int start, int end);
 
   Long hset(String key, String field, String value);
+
+  Long hset(String key, Map<String, String> hash);
 
   String hget(String key, String field);
 
@@ -82,7 +94,7 @@ public interface JedisCommands {
 
   Long hincrBy(String key, String field, long value);
 
-  Double hincrByFloat(final String key, final String field, final double value);
+  Double hincrByFloat(String key, String field, double value);
 
   Boolean hexists(String key, String field);
 
@@ -102,9 +114,9 @@ public interface JedisCommands {
 
   Long llen(String key);
 
-  List<String> lrange(String key, long start, long end);
+  List<String> lrange(String key, long start, long stop);
 
-  String ltrim(String key, long start, long end);
+  String ltrim(String key, long start, long stop);
 
   String lindex(String key, long index);
 
@@ -144,23 +156,23 @@ public interface JedisCommands {
 
   Long zadd(String key, Map<String, Double> scoreMembers, ZAddParams params);
 
-  Set<String> zrange(String key, long start, long end);
+  Set<String> zrange(String key, long start, long stop);
 
-  Long zrem(String key, String... member);
+  Long zrem(String key, String... members);
 
-  Double zincrby(String key, double score, String member);
+  Double zincrby(String key, double increment, String member);
 
-  Double zincrby(String key, double score, String member, ZIncrByParams params);
+  Double zincrby(String key, double increment, String member, ZIncrByParams params);
 
   Long zrank(String key, String member);
 
   Long zrevrank(String key, String member);
 
-  Set<String> zrevrange(String key, long start, long end);
+  Set<String> zrevrange(String key, long start, long stop);
 
-  Set<Tuple> zrangeWithScores(String key, long start, long end);
+  Set<Tuple> zrangeWithScores(String key, long start, long stop);
 
-  Set<Tuple> zrevrangeWithScores(String key, long start, long end);
+  Set<Tuple> zrevrangeWithScores(String key, long start, long stop);
 
   Long zcard(String key);
 
@@ -206,27 +218,29 @@ public interface JedisCommands {
 
   Set<Tuple> zrevrangeByScoreWithScores(String key, String max, String min, int offset, int count);
 
-  Long zremrangeByRank(String key, long start, long end);
+  Long zremrangeByRank(String key, long start, long stop);
 
-  Long zremrangeByScore(String key, double start, double end);
+  Long zremrangeByScore(String key, double min, double max);
 
-  Long zremrangeByScore(String key, String start, String end);
+  Long zremrangeByScore(String key, String min, String max);
 
-  Long zlexcount(final String key, final String min, final String max);
+  Long zlexcount(String key, String min, String max);
 
-  Set<String> zrangeByLex(final String key, final String min, final String max);
+  Set<String> zrangeByLex(String key, String min, String max);
 
-  Set<String> zrangeByLex(final String key, final String min, final String max, final int offset,
-      final int count);
+  Set<String> zrangeByLex(String key, String min, String max, int offset,
+      int count);
 
-  Set<String> zrevrangeByLex(final String key, final String max, final String min);
+  Set<String> zrevrangeByLex(String key, String max, String min);
 
-  Set<String> zrevrangeByLex(final String key, final String max, final String min,
-      final int offset, final int count);
+  Set<String> zrevrangeByLex(String key, String max, String min,
+      int offset, int count);
 
-  Long zremrangeByLex(final String key, final String min, final String max);
+  Long zremrangeByLex(String key, String min, String max);
 
+  @Deprecated
   Long linsert(String key, Client.LIST_POSITION where, String pivot, String value);
+  Long linsert(String key, ListPosition where, String pivot, String value);
 
   Long lpushx(String key, String... string);
 
@@ -250,17 +264,19 @@ public interface JedisCommands {
 
   Long del(String key);
 
+  Long unlink(String key);
+
   String echo(String string);
 
   Long move(String key, int dbIndex);
 
-  Long bitcount(final String key);
+  Long bitcount(String key);
 
-  Long bitcount(final String key, long start, long end);
+  Long bitcount(String key, long start, long end);
 
-  Long bitpos(final String key, final boolean value);
+  Long bitpos(String key, boolean value);
 
-  Long bitpos(final String key, final boolean value, final BitPosParams params);
+  Long bitpos(String key, boolean value, BitPosParams params);
 
   @Deprecated
   /**
@@ -286,22 +302,22 @@ public interface JedisCommands {
    */
   ScanResult<Tuple> zscan(final String key, int cursor);
 
-  ScanResult<Map.Entry<String, String>> hscan(final String key, final String cursor);
+  ScanResult<Map.Entry<String, String>> hscan(String key, String cursor);
 
-  ScanResult<Map.Entry<String, String>> hscan(final String key, final String cursor,
-      final ScanParams params);
+  ScanResult<Map.Entry<String, String>> hscan(String key, String cursor,
+      ScanParams params);
 
-  ScanResult<String> sscan(final String key, final String cursor);
+  ScanResult<String> sscan(String key, String cursor);
 
   ScanResult<String> sscan(final String key, final String cursor, final ScanParams params);
 
-  ScanResult<Tuple> zscan(final String key, final String cursor);
+  ScanResult<Tuple> zscan(String key, String cursor);
 
-  ScanResult<Tuple> zscan(final String key, final String cursor, final ScanParams params);
+  ScanResult<Tuple> zscan(String key, String cursor, ScanParams params);
 
-  Long pfadd(final String key, final String... elements);
+  Long pfadd(String key, String... elements);
 
-  long pfcount(final String key);
+  long pfcount(String key);
 
   // Geo Commands
 
@@ -320,11 +336,37 @@ public interface JedisCommands {
   List<GeoRadiusResponse> georadius(String key, double longitude, double latitude, double radius,
       GeoUnit unit);
 
+  List<GeoRadiusResponse> georadiusReadonly(String key, double longitude, double latitude, double radius,
+      GeoUnit unit);
+
   List<GeoRadiusResponse> georadius(String key, double longitude, double latitude, double radius,
+      GeoUnit unit, GeoRadiusParam param);
+
+  List<GeoRadiusResponse> georadiusReadonly(String key, double longitude, double latitude, double radius,
       GeoUnit unit, GeoRadiusParam param);
 
   List<GeoRadiusResponse> georadiusByMember(String key, String member, double radius, GeoUnit unit);
 
+  List<GeoRadiusResponse> georadiusByMemberReadonly(String key, String member, double radius, GeoUnit unit);
+
   List<GeoRadiusResponse> georadiusByMember(String key, String member, double radius, GeoUnit unit,
       GeoRadiusParam param);
+
+  List<GeoRadiusResponse> georadiusByMemberReadonly(String key, String member, double radius, GeoUnit unit,
+      GeoRadiusParam param);
+
+  /**
+   * Executes BITFIELD Redis command
+   * @param key
+   * @param arguments
+   */
+  List<Long> bitfield(String key, String...arguments);
+  
+  /**
+   * Used for HSTRLEN Redis command
+   * @param key 
+   * @param field
+   * @return lenth of the value for key
+   */
+  Long hstrlen(String key, String field);
 }

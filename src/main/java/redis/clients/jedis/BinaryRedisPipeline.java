@@ -17,9 +17,11 @@ public interface BinaryRedisPipeline {
 
   Response<Long> decr(byte[] key);
 
-  Response<Long> decrBy(byte[] key, long integer);
+  Response<Long> decrBy(byte[] key, long decrement);
 
   Response<Long> del(byte[] keys);
+
+  Response<Long> unlink(byte[] keys);
 
   Response<byte[]> echo(byte[] string);
 
@@ -61,17 +63,21 @@ public interface BinaryRedisPipeline {
 
   Response<Long> hset(byte[] key, byte[] field, byte[] value);
 
+  Response<Long> hset(byte[] key, Map<byte[], byte[]> hash);
+
   Response<Long> hsetnx(byte[] key, byte[] field, byte[] value);
 
   Response<List<byte[]>> hvals(byte[] key);
 
   Response<Long> incr(byte[] key);
 
-  Response<Long> incrBy(byte[] key, long integer);
+  Response<Long> incrBy(byte[] key, long increment);
 
   Response<byte[]> lindex(byte[] key, long index);
 
+  @Deprecated
   Response<Long> linsert(byte[] key, BinaryClient.LIST_POSITION where, byte[] pivot, byte[] value);
+  Response<Long> linsert(byte[] key, ListPosition where, byte[] pivot, byte[] value);
 
   Response<Long> llen(byte[] key);
 
@@ -81,13 +87,13 @@ public interface BinaryRedisPipeline {
 
   Response<Long> lpushx(byte[] key, byte[]... bytes);
 
-  Response<List<byte[]>> lrange(byte[] key, long start, long end);
+  Response<List<byte[]>> lrange(byte[] key, long start, long stop);
 
   Response<Long> lrem(byte[] key, long count, byte[] value);
 
   Response<String> lset(byte[] key, long index, byte[] value);
 
-  Response<String> ltrim(byte[] key, long start, long end);
+  Response<String> ltrim(byte[] key, long start, long stop);
 
   Response<Long> move(byte[] key, int dbIndex);
 
@@ -135,7 +141,11 @@ public interface BinaryRedisPipeline {
 
   Response<String> substr(byte[] key, int start, int end);
 
+  Response<Long> touch(byte[] keys);
+
   Response<Long> ttl(byte[] key);
+
+  Response<Long> pttl(byte[] key);
 
   Response<String> type(byte[] key);
 
@@ -151,11 +161,13 @@ public interface BinaryRedisPipeline {
 
   Response<Long> zcount(byte[] key, double min, double max);
 
-  Response<Double> zincrby(byte[] key, double score, byte[] member);
+  Response<Long> zcount(byte[] key, byte[] min, byte[] max);
 
-  Response<Double> zincrby(byte[] key, double score, byte[] member, ZIncrByParams params);
+  Response<Double> zincrby(byte[] key, double increment, byte[] member);
 
-  Response<Set<byte[]>> zrange(byte[] key, long start, long end);
+  Response<Double> zincrby(byte[] key, double increment, byte[] member, ZIncrByParams params);
+
+  Response<Set<byte[]>> zrange(byte[] key, long start, long stop);
 
   Response<Set<byte[]>> zrangeByScore(byte[] key, double min, double max);
 
@@ -193,47 +205,55 @@ public interface BinaryRedisPipeline {
   Response<Set<Tuple>> zrevrangeByScoreWithScores(byte[] key, byte[] max, byte[] min, int offset,
       int count);
 
-  Response<Set<Tuple>> zrangeWithScores(byte[] key, long start, long end);
+  Response<Set<Tuple>> zrangeWithScores(byte[] key, long start, long stop);
 
   Response<Long> zrank(byte[] key, byte[] member);
 
-  Response<Long> zrem(byte[] key, byte[]... member);
+  Response<Long> zrem(byte[] key, byte[]... members);
 
-  Response<Long> zremrangeByRank(byte[] key, long start, long end);
+  Response<Long> zremrangeByRank(byte[] key, long start, long stop);
 
-  Response<Long> zremrangeByScore(byte[] key, double start, double end);
+  Response<Long> zremrangeByScore(byte[] key, double min, double max);
 
-  Response<Long> zremrangeByScore(byte[] key, byte[] start, byte[] end);
+  Response<Long> zremrangeByScore(byte[] key, byte[] min, byte[] max);
 
-  Response<Set<byte[]>> zrevrange(byte[] key, long start, long end);
+  Response<Set<byte[]>> zrevrange(byte[] key, long start, long stop);
 
-  Response<Set<Tuple>> zrevrangeWithScores(byte[] key, long start, long end);
+  Response<Set<Tuple>> zrevrangeWithScores(byte[] key, long start, long stop);
 
   Response<Long> zrevrank(byte[] key, byte[] member);
 
   Response<Double> zscore(byte[] key, byte[] member);
 
-  Response<Long> zlexcount(final byte[] key, final byte[] min, final byte[] max);
+  Response<Long> zlexcount(byte[] key, byte[] min, byte[] max);
 
-  Response<Set<byte[]>> zrangeByLex(final byte[] key, final byte[] min, final byte[] max);
+  Response<Set<byte[]>> zrangeByLex(byte[] key, byte[] min, byte[] max);
 
-  Response<Set<byte[]>> zrangeByLex(final byte[] key, final byte[] min, final byte[] max,
+  Response<Set<byte[]>> zrangeByLex(byte[] key, byte[] min, byte[] max,
       int offset, int count);
 
-  Response<Set<byte[]>> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min);
+  Response<Set<byte[]>> zrevrangeByLex(byte[] key, byte[] max, byte[] min);
 
-  Response<Set<byte[]>> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min,
+  Response<Set<byte[]>> zrevrangeByLex(byte[] key, byte[] max, byte[] min,
       int offset, int count);
 
-  Response<Long> zremrangeByLex(final byte[] key, final byte[] min, final byte[] max);
+  Response<Long> zremrangeByLex(byte[] key, byte[] min, byte[] max);
 
   Response<Long> bitcount(byte[] key);
 
   Response<Long> bitcount(byte[] key, long start, long end);
 
-  Response<Long> pfadd(final byte[] key, final byte[]... elements);
+  Response<Long> pfadd(byte[] key, byte[]... elements);
 
-  Response<Long> pfcount(final byte[] key);
+  Response<Long> pfcount(byte[] key);
+
+  Response<byte[]> dump(byte[] key);
+
+  Response<String> restore(byte[] key, int ttl, byte[] serializedValue);
+
+  Response<String> restoreReplace(byte[] key, int ttl, byte[] serializedValue);
+
+  Response<String> migrate(String host, int port, byte[] key, int destinationDB, int timeout);
 
   // Geo Commands
 
@@ -252,12 +272,28 @@ public interface BinaryRedisPipeline {
   Response<List<GeoRadiusResponse>> georadius(byte[] key, double longitude, double latitude,
       double radius, GeoUnit unit);
 
+  Response<List<GeoRadiusResponse>> georadiusReadonly(byte[] key, double longitude, double latitude,
+      double radius, GeoUnit unit);
+
   Response<List<GeoRadiusResponse>> georadius(byte[] key, double longitude, double latitude,
+      double radius, GeoUnit unit, GeoRadiusParam param);
+
+  Response<List<GeoRadiusResponse>> georadiusReadonly(byte[] key, double longitude, double latitude,
       double radius, GeoUnit unit, GeoRadiusParam param);
 
   Response<List<GeoRadiusResponse>> georadiusByMember(byte[] key, byte[] member, double radius,
       GeoUnit unit);
 
+  Response<List<GeoRadiusResponse>> georadiusByMemberReadonly(byte[] key, byte[] member, double radius,
+      GeoUnit unit);
+  
   Response<List<GeoRadiusResponse>> georadiusByMember(byte[] key, byte[] member, double radius,
       GeoUnit unit, GeoRadiusParam param);
+
+  Response<List<GeoRadiusResponse>> georadiusByMemberReadonly(byte[] key, byte[] member, double radius,
+      GeoUnit unit, GeoRadiusParam param);
+
+  Response<List<Long>> bitfield(byte[] key, byte[]... elements);
+
+  Response<Long> hstrlen(byte[] key, byte[] field);
 }

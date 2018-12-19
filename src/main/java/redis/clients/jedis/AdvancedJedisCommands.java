@@ -17,9 +17,21 @@ public interface AdvancedJedisCommands {
 
   List<Slowlog> slowlogGet(long entries);
 
-  Long objectRefcount(String string);
+  Long objectRefcount(String key);
 
-  String objectEncoding(String string);
+  String objectEncoding(String key);
 
-  Long objectIdletime(String string);
+  Long objectIdletime(String key);
+
+  String migrate(String host, int port, String key, int destinationDB, int timeout);
+
+  String clientKill(String ipPort);
+
+  String clientKill(String ip, int port);
+
+  String clientGetname();
+
+  String clientList();
+
+  String clientSetname(String name);
 }

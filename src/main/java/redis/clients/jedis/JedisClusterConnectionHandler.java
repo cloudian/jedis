@@ -1,8 +1,6 @@
 package redis.clients.jedis;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.io.Closeable;
 import java.util.Map;
 import java.util.Set;
 
@@ -10,32 +8,44 @@ import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
-public abstract class JedisClusterConnectionHandler {
+public abstract class JedisClusterConnectionHandler implements Closeable {
   protected final JedisClusterInfoCache cache;
+
+  public JedisClusterConnectionHandler(Set<HostAndPort> nodes,
+                                       final GenericObjectPoolConfig poolConfig, int connectionTimeout, int soTimeout, String password) {
+    this(nodes, poolConfig, connectionTimeout, soTimeout, password, null);
+  }
+
+  public JedisClusterConnectionHandler(Set<HostAndPort> nodes,
+          final GenericObjectPoolConfig poolConfig, int connectionTimeout, int soTimeout, String password, String clientName) {
+    this.cache = new JedisClusterInfoCache(poolConfig, connectionTimeout, soTimeout, password, clientName);
+    initializeSlotsCache(nodes, poolConfig, connectionTimeout, soTimeout, password, clientName);
+}
 
   abstract Jedis getConnection();
 
   abstract Jedis getConnectionFromSlot(int slot);
 
   public Jedis getConnectionFromNode(HostAndPort node) {
-    cache.setNodeIfNotExist(node);
-    return cache.getNode(JedisClusterInfoCache.getNodeKey(node)).getResource();
+    return cache.setupNodeIfNotExist(node).getResource();
   }
-
-  public JedisClusterConnectionHandler(Set<HostAndPort> nodes,
-      final GenericObjectPoolConfig poolConfig, int connectionTimeout, int soTimeout) {
-    this.cache = new JedisClusterInfoCache(poolConfig, connectionTimeout, soTimeout);
-    initializeSlotsCache(nodes, poolConfig);
-  }
-
+  
   public Map<String, JedisPool> getNodes() {
     return cache.getNodes();
   }
 
-  private void initializeSlotsCache(Set<HostAndPort> startNodes, GenericObjectPoolConfig poolConfig) {
+  private void initializeSlotsCache(Set<HostAndPort> startNodes, GenericObjectPoolConfig poolConfig,
+                                    int connectionTimeout, int soTimeout, String password, String clientName) {
     for (HostAndPort hostAndPort : startNodes) {
-      Jedis jedis = new Jedis(hostAndPort.getHost(), hostAndPort.getPort());
+      Jedis jedis = null;
       try {
+        jedis = new Jedis(hostAndPort.getHost(), hostAndPort.getPort(), connectionTimeout, soTimeout);
+        if (password != null) {
+          jedis.auth(password);
+        }
+        if (clientName != null) {
+          jedis.clientSetname(clientName);
+        }
         cache.discoverClusterNodesAndSlots(jedis);
         break;
       } catch (JedisConnectionException e) {
@@ -46,41 +56,18 @@ public abstract class JedisClusterConnectionHandler {
         }
       }
     }
-
-    for (HostAndPort node : startNodes) {
-      cache.setNodeIfNotExist(node);
-    }
   }
 
   public void renewSlotCache() {
-    for (JedisPool jp : getShuffledNodesPool()) {
-      Jedis jedis = null;
-      try {
-        jedis = jp.getResource();
-        cache.discoverClusterSlots(jedis);
-        break;
-      } catch (JedisConnectionException e) {
-        // try next nodes
-      } finally {
-        if (jedis != null) {
-          jedis.close();
-        }
-      }
-    }
+    cache.renewClusterSlots(null);
   }
 
   public void renewSlotCache(Jedis jedis) {
-    try {
-      cache.discoverClusterSlots(jedis);
-    } catch (JedisConnectionException e) {
-      renewSlotCache();
-    }
+    cache.renewClusterSlots(jedis);
   }
 
-  protected List<JedisPool> getShuffledNodesPool() {
-    List<JedisPool> pools = new ArrayList<JedisPool>();
-    pools.addAll(cache.getNodes().values());
-    Collections.shuffle(pools);
-    return pools;
+  @Override
+  public void close() {
+    cache.reset();
   }
 }
