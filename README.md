@@ -1,18 +1,23 @@
+[![Build Status](https://travis-ci.org/xetorthio/jedis.png?branch=master)](https://travis-ci.org/xetorthio/jedis)
+
+# Cloudian
+
+Jedis code is forked to cloudian/jedis.
+
+To build package, use "mvn clean package -DskipTests".  Then copy jar
+file (e.g., jedis-2.8.1.jar) from the target directory to mts-s3/lib,
+and git commit it there.
+
+Modifications to support JMX calls, add request logging.
+
+
 # Jedis
 
 Jedis is a blazingly small and sane [Redis](http://github.com/antirez/redis "Redis") java client.
 
 Jedis was conceived to be EASY to use.
 
-Jedis is fully compatible with redis 2.0.0.
-
-## I want to persist my objects in Redis. How can I do it?
-You should definitely check [JOhm](http://github.com/xetorthio/johm "JOhm")!!!
-And of course, you can always serialize it and store it.
-
-## Is there a Groovy client?
-
-Yes. You can use Jedis if you want, but I recommend [Gedis](http://github.com/xetorthio/gedis "Gedis"), which is Jedis but with a nicer groovy-like interface :) 
+Jedis is fully compatible with Redis 2.8.5.
 
 ## Community
 
@@ -20,12 +25,12 @@ Meet us on IRC: ##jedis on freenode.net
 
 Join the mailing-list at [http://groups.google.com/group/jedis_redis](http://groups.google.com/group/jedis_redis)
 
-## Ok.. so what can I do with Jedis?
+## So what can I do with Jedis?
 All of the following redis features are supported:
 
 - Sorting
 - Connection handling
-- Commands operating on all the kind of values
+- Commands operating on any kind of values
 - Commands operating on string values
 - Commands operating on hashes
 - Commands operating on lists
@@ -37,53 +42,76 @@ All of the following redis features are supported:
 - Persistence control commands
 - Remote server control commands
 - Connection pooling
-- Sharding (MD5, MurmureHash)
+- Sharding (MD5, MurmurHash)
 - Key-tags for sharding
 - Sharding with pipelining
+- Scripting with pipelining
+- Redis Cluster
 
 ## How do I use it?
 
-You can download the latests build at: 
-    http://github.com/xetorthio/jedis/downloads
+You can download the latest build at: 
+    http://github.com/xetorthio/jedis/releases
 
 Or use it as a maven dependency:
 
-    <dependency>
-        <groupId>redis.clients</groupId>
-        <artifactId>jedis</artifactId>
-        <version>1.3.0</version>
-        <type>jar</type>
-        <scope>compile</scope>
-    </dependency>
-
+```xml
+<dependency>
+    <groupId>redis.clients</groupId>
+    <artifactId>jedis</artifactId>
+    <version>2.6.0</version>
+    <type>jar</type>
+    <scope>compile</scope>
+</dependency>
+```
 
 To use it just:
     
-    Jedis jedis = new Jedis("localhost");
-    jedis.set("foo", "bar");
-    String value = jedis.get("foo");
+```java
+Jedis jedis = new Jedis("localhost");
+jedis.set("foo", "bar");
+String value = jedis.get("foo");
+```
 
 For more usage examples check the tests.
 
-Please check the [wiki](http://github.com/xetorthio/jedis/wiki "wiki"). There are lots of cool stuff you should know!
+Please check the [wiki](http://github.com/xetorthio/jedis/wiki "wiki"). There are lots of cool things you should know, including information about connection pooling.
 
 And you are done!
 
+## Jedis Cluster
+
+Redis cluster [specification](http://redis.io/topics/cluster-spec) (still under development) is implemented
+
+```java
+Set<HostAndPort> jedisClusterNodes = new HashSet<HostAndPort>();
+//Jedis Cluster will attempt to discover cluster nodes automatically
+jedisClusterNodes.add(new HostAndPort("127.0.0.1", 7379));
+JedisCluster jc = new JedisCluster(jedisClusterNodes);
+jc.set("foo", "bar");
+String value = jc.get("foo");
+```
+
 ## I want to contribute!
 
-That is great! Just fork the project in github. Create a topic branch, write some tests and the feature that you wish to contribute.
+That is great! Just fork the project in github. Create a topic branch, write some code, and add some tests for your new code.
 
 To run the tests:
 
 - Use the latest redis master branch.
 
-- Run 2 instances of redis using conf files in conf folder. For the tests we use 2 redis servers, one on default port (6379) and the other one on (6380). Both have authentication enabled with default password (foobared). This way we can test both sharding and auth command.
+- Run ```make test```. This will run 2 instances of redis. We use 2 redis
+	servers, one on default port (6379) and the other one on (6380). Both have
+	authentication enabled with default password (foobared). This way we can
+	test both sharding and auth command. For the Sentinel tests to we use a
+	default Sentinel configuration that is configured to properly authenticate
+	using the same password with a master called mymaster running on 6379.
 
 Thanks for helping!
 
 ## License
 
-Copyright (c) 2010 Jonathan Leibiusky
+Copyright (c) 2011 Jonathan Leibiusky
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
